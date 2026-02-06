@@ -1,18 +1,14 @@
-// 備品管理アプリケーション
-
-// データストレージ
-const STORAGE_KEY = 'inventory_items';
+// 社内備品管理アプリケーション（Firebase版）
 
 // 状態管理
 let inventory = [];
 let deleteTargetId = null;
+let unsubscribe = null;
 
 // 初期化
 document.addEventListener('DOMContentLoaded', () => {
-    loadInventory();
-    renderInventory();
-    updateSummary();
     setupEventListeners();
+    subscribeToInventory();
 });
 
 // イベントリスナーの設定
@@ -42,22 +38,24 @@ function setupEventListeners() {
     });
 }
 
-// LocalStorageからデータ読み込み
-function loadInventory() {
-    const data = localStorage.getItem(STORAGE_KEY);
-    if (data) {
-        inventory = JSON.parse(data);
-    }
+// Firestoreリアルタイム購読
+function subscribeToInventory() {
+    unsubscribe = inventoryCollection.orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
+        inventory = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        renderInventory();
+        updateSummary();
+    }, (error) => {
+        console.error('データの取得に失敗しました:', error);
+        showError('データの取得に失敗しました。ページを再読み込みしてください。');
+    });
 }
 
-// LocalStorageにデータ保存
-function saveInventory() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(inventory));
-}
-
-// 一意のIDを生成
-function generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+// エラー表示
+function showError(message) {
+    alert(message);
 }
 
 // 在庫状態を判定
@@ -239,7 +237,7 @@ function closeModal() {
 }
 
 // 商品を保存
-function saveProduct(event) {
+async function saveProduct(event) {
     event.preventDefault();
 
     const id = document.getElementById('productId').value;
@@ -259,44 +257,32 @@ function saveProduct(event) {
         return;
     }
 
-    if (id) {
-        // 更新
-        const index = inventory.findIndex(item => item.id === id);
-        if (index !== -1) {
-            inventory[index] = {
-                ...inventory[index],
-                sku,
-                name,
-                category,
-                quantity,
-                price,
-                minStock,
-                orderUrl,
-                description,
-                updatedAt: new Date().toISOString()
-            };
-        }
-    } else {
-        // 新規追加
-        inventory.push({
-            id: generateId(),
-            sku,
-            name,
-            category,
-            quantity,
-            price,
-            minStock,
-            orderUrl,
-            description,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        });
-    }
+    const productData = {
+        sku,
+        name,
+        category,
+        quantity,
+        price,
+        minStock,
+        orderUrl,
+        description,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
 
-    saveInventory();
-    renderInventory();
-    updateSummary();
-    closeModal();
+    try {
+        if (id) {
+            // 更新
+            await inventoryCollection.doc(id).update(productData);
+        } else {
+            // 新規追加
+            productData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            await inventoryCollection.add(productData);
+        }
+        closeModal();
+    } catch (error) {
+        console.error('保存に失敗しました:', error);
+        alert('保存に失敗しました。もう一度お試しください。');
+    }
 }
 
 // 在庫調整モーダルを開く
@@ -319,7 +305,7 @@ function closeStockModal() {
 }
 
 // 在庫調整を適用
-function adjustStock(event) {
+async function adjustStock(event) {
     event.preventDefault();
 
     const id = document.getElementById('stockProductId').value;
@@ -329,24 +315,29 @@ function adjustStock(event) {
     const item = inventory.find(i => i.id === id);
     if (!item) return;
 
+    let newQuantity;
     switch (adjustType) {
         case 'add':
-            item.quantity += amount;
+            newQuantity = item.quantity + amount;
             break;
         case 'subtract':
-            item.quantity = Math.max(0, item.quantity - amount);
+            newQuantity = Math.max(0, item.quantity - amount);
             break;
         case 'set':
-            item.quantity = amount;
+            newQuantity = amount;
             break;
     }
 
-    item.updatedAt = new Date().toISOString();
-
-    saveInventory();
-    renderInventory();
-    updateSummary();
-    closeStockModal();
+    try {
+        await inventoryCollection.doc(id).update({
+            quantity: newQuantity,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        closeStockModal();
+    } catch (error) {
+        console.error('在庫調整に失敗しました:', error);
+        alert('在庫調整に失敗しました。もう一度お試しください。');
+    }
 }
 
 // 削除確認モーダルを開く
@@ -366,13 +357,14 @@ function closeDeleteModal() {
 }
 
 // 削除を実行
-function confirmDelete() {
+async function confirmDelete() {
     if (!deleteTargetId) return;
 
-    inventory = inventory.filter(item => item.id !== deleteTargetId);
-
-    saveInventory();
-    renderInventory();
-    updateSummary();
-    closeDeleteModal();
+    try {
+        await inventoryCollection.doc(deleteTargetId).delete();
+        closeDeleteModal();
+    } catch (error) {
+        console.error('削除に失敗しました:', error);
+        alert('削除に失敗しました。もう一度お試しください。');
+    }
 }
