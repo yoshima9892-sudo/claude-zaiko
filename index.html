@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>社内備品管理システム</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>社内備品管理システム</h1>
+        </header>
+
+        <main>
+            <!-- 統計サマリー -->
+            <section class="summary">
+                <div class="summary-card">
+                    <span class="summary-label">総商品数</span>
+                    <span class="summary-value" id="totalItems">0</span>
+                </div>
+                <div class="summary-card">
+                    <span class="summary-label">総在庫数</span>
+                    <span class="summary-value" id="totalStock">0</span>
+                </div>
+                <div class="summary-card warning">
+                    <span class="summary-label">在庫切れ</span>
+                    <span class="summary-value" id="outOfStock">0</span>
+                </div>
+                <div class="summary-card alert">
+                    <span class="summary-label">要発注</span>
+                    <span class="summary-value" id="lowStock">0</span>
+                </div>
+            </section>
+
+            <!-- アクションバー -->
+            <section class="action-bar">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="商品名またはSKUで検索...">
+                </div>
+                <div class="filter-box">
+                    <select id="categoryFilter">
+                        <option value="">全てのカテゴリ</option>
+                    </select>
+                    <select id="stockFilter">
+                        <option value="">全ての在庫状態</option>
+                        <option value="in-stock">在庫あり</option>
+                        <option value="low-stock">要発注</option>
+                        <option value="out-of-stock">在庫切れ</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="openModal()">
+                    + 新規商品追加
+                </button>
+            </section>
+
+            <!-- 商品一覧テーブル -->
+            <section class="inventory-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>SKU</th>
+                            <th>商品名</th>
+                            <th>カテゴリ</th>
+                            <th>在庫数</th>
+                            <th>発注点</th>
+                            <th>単価</th>
+                            <th>状態</th>
+                            <th>購入</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventoryBody">
+                        <!-- 動的に生成 -->
+                    </tbody>
+                </table>
+                <div class="empty-state" id="emptyState">
+                    <p>商品がありません。「新規商品追加」ボタンから商品を追加してください。</p>
+                </div>
+            </section>
+        </main>
+
+        <!-- 商品追加/編集モーダル -->
+        <div class="modal" id="productModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="modalTitle">新規商品追加</h2>
+                    <button class="close-btn" onclick="closeModal()">&times;</button>
+                </div>
+                <form id="productForm" onsubmit="saveProduct(event)">
+                    <input type="hidden" id="productId">
+                    <div class="form-group">
+                        <label for="sku">SKU (商品コード) *</label>
+                        <input type="text" id="sku" required placeholder="例: PROD-001">
+                    </div>
+                    <div class="form-group">
+                        <label for="name">商品名 *</label>
+                        <input type="text" id="name" required placeholder="例: ワイヤレスマウス">
+                    </div>
+                    <div class="form-group">
+                        <label for="category">カテゴリ *</label>
+                        <input type="text" id="category" required list="categoryList" placeholder="例: 電子機器">
+                        <datalist id="categoryList"></datalist>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="quantity">在庫数 *</label>
+                            <input type="number" id="quantity" required min="0" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="price">単価 (円) *</label>
+                            <input type="number" id="price" required min="0" step="1" value="0">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="minStock">発注点 (この数以下で要発注)</label>
+                        <input type="number" id="minStock" min="0" value="5">
+                    </div>
+                    <div class="form-group">
+                        <label for="orderUrl">購入リンク (URL)</label>
+                        <input type="url" id="orderUrl" placeholder="例: https://amazon.co.jp/dp/...">
+                    </div>
+                    <div class="form-group">
+                        <label for="description">備考</label>
+                        <textarea id="description" rows="3" placeholder="発注先、納期など..."></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+                        <button type="submit" class="btn btn-primary">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 在庫調整モーダル -->
+        <div class="modal" id="stockModal">
+            <div class="modal-content modal-sm">
+                <div class="modal-header">
+                    <h2>在庫調整</h2>
+                    <button class="close-btn" onclick="closeStockModal()">&times;</button>
+                </div>
+                <form id="stockForm" onsubmit="adjustStock(event)">
+                    <input type="hidden" id="stockProductId">
+                    <p class="stock-product-name" id="stockProductName"></p>
+                    <p class="stock-current">現在の在庫: <span id="currentStock">0</span></p>
+                    <div class="form-group">
+                        <label>調整タイプ</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="adjustType" value="add" checked>
+                                入庫 (+)
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="adjustType" value="subtract">
+                                出庫 (-)
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="adjustType" value="set">
+                                数量設定
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="adjustAmount">数量</label>
+                        <input type="number" id="adjustAmount" required min="0" value="1">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeStockModal()">キャンセル</button>
+                        <button type="submit" class="btn btn-primary">適用</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 削除確認モーダル -->
+        <div class="modal" id="deleteModal">
+            <div class="modal-content modal-sm">
+                <div class="modal-header">
+                    <h2>削除確認</h2>
+                    <button class="close-btn" onclick="closeDeleteModal()">&times;</button>
+                </div>
+                <p class="delete-message">この商品を削除しますか？</p>
+                <p class="delete-product-name" id="deleteProductName"></p>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">キャンセル</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmDelete()">削除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
