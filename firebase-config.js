@@ -1,14 +1,11 @@
 // Firebase設定
-// ※ 以下の値をあなたのFirebaseプロジェクトの設定に置き換えてください
-// Firebase Console (https://console.firebase.google.com/) で取得できます
-
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyAF2mD90cdwJ52cNZCVjklzlAngXegim2Q",
+    authDomain: "bihin-kanri-8a4eb.firebaseapp.com",
+    projectId: "bihin-kanri-8a4eb",
+    storageBucket: "bihin-kanri-8a4eb.firebasestorage.app",
+    messagingSenderId: "775786834450",
+    appId: "1:775786834450:web:a215c766c9e7a68f8406cb"
 };
 
 // Firebase初期化
